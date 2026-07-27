@@ -25,7 +25,7 @@ dp = Dispatcher()
 user_xp = {}
 user_names = {}
 creator_data = {"creator_xp": 750}
-active_quizzes = {}
+active_text_quizzes = {}
 
 i18n = {
     "uk": {
@@ -36,11 +36,16 @@ i18n = {
         "btn_leaderboard": "🏆 Топ гравців",
         "xp_zero": "У тебе поки 0 XP 😢. Тисни «Вгадай мелодію», щоб заробити бали!",
         "xp_amount": "Твій музичний досвід: <b>{xp} XP</b> 🌟",
-        "creator_xp": "Опыт создателя: <b>{xp} XP</b> 👑\nПроєкт розроблено на Python + yt-dlp!",
-        "quiz_start": "🎧 <b>Слухай уривок (30 сек)!</b> Що це за пісня?",
-        "quiz_win": "🎉 <b>Правильно!</b> {name} отримує +50 XP!\n🎵 Пісня: {track}",
-        "quiz_lose": "❌ Неправильно!",
-        "quiz_late": "⏳ Халепа! Хтось вже вгадав цю пісню.",
+        "creator_xp": "Досвід творця: <b>{xp} XP</b> 👑\nПроєкт розроблено на Python + yt-dlp!",
+        "quiz_choose": "🎮 <b>Вибери категорію для вікторини «Вгадай мелодію»:</b>",
+        "quiz_start": (
+            "🎧 <b>Музична вікторина «Вгадай мелодію»!</b>\n"
+            "Слухай уривок вище та <b>напиши в чат виконавця та назву треку</b>.\n"
+            "Хто перший вгадає — отримує +50 XP!"
+        ),
+        "quiz_win": "🎉 <b>Браво, {name}!</b> Ти першим вгадав мелодію (+50 XP)!\n🎵 <b>Трек:</b> {track}",
+        "thanks_creator": "❤️ Дякуємо! Твоя подяка зарахована, досвід творця збільшено!",
+        "thanks_alert": "Дякуємо за підтримку автора! 🚀",
         "welcome_photo": "👋 <b>Привіт! Я твій музичний бот-помічник.</b>\nПрацюю в особистих повідомленнях та групових чатах!",
         "welcome_text": (
             "📖 <b>ПОВНА ІНСТРУКЦІЯ ТА МОЇ МОЖЛИВОСТІ:</b>\n\n"
@@ -101,12 +106,16 @@ async def process_music_search(message: Message, query: str):
     if track_info and os.path.exists(track_info['path']):
         try:
             audio_file = FSInputFile(track_info['path'])
+            thanks_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❤️ Віддячити творцю (+20 XP)", callback_data="thank_creator")]
+            ])
             await message.answer_audio(
                 audio=audio_file,
                 title=track_info['title'],
                 performer=track_info['uploader'],
                 caption=f"🎵 <b>{track_info['title']}</b>\n👤 <b>Виконавець:</b> {track_info['uploader']}",
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=thanks_keyboard
             )
             await status_msg.delete()
         except Exception as e:
@@ -127,6 +136,17 @@ def get_menu_keyboard():
         [InlineKeyboardButton(text=t["btn_leaderboard"], callback_data="show_leaderboard")]
     ])
 
+def get_quiz_categories_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎸 Rock / Metal", callback_data="quiz_cat_rock")],
+        [InlineKeyboardButton(text="⚡ Pop / Hits", callback_data="quiz_cat_pop")],
+        [InlineKeyboardButton(text="🎧 Electronic", callback_data="quiz_cat_electronic")],
+        [InlineKeyboardButton(text="🇺🇦 Ukrainian Music", callback_data="quiz_cat_ukrainian")],
+        [InlineKeyboardButton(text="📼 80-ті (80s)", callback_data="quiz_cat_80s")],
+        [InlineKeyboardButton(text="💿 90-ті (90s)", callback_data="quiz_cat_90s")],
+        [InlineKeyboardButton(text="🎲 Випадковий жанр", callback_data="quiz_cat_random")]
+    ])
+
 @dp.message(Command("start", "help"))
 async def cmd_start(message: Message):
     add_url = f"https://t.me/{BOT_USERNAME}?startgroup=true&admin=change_info+delete_messages"
@@ -134,13 +154,11 @@ async def cmd_start(message: Message):
         [InlineKeyboardButton(text="➕ Додати бота в групу", url=add_url)],
         [InlineKeyboardButton(text="🎮 Меню та рейтинг", callback_data="open_menu")]
     ])
-    # Надсилаємо фото з коротким підписом
     await message.answer_photo(
         photo=LOGO_URL,
         caption=i18n["uk"]["welcome_photo"],
         parse_mode="HTML"
     )
-    # Надіслати основний текст інструкції окремим повідомленням з кнопками
     await message.answer(
         text=i18n["uk"]["welcome_text"],
         parse_mode="HTML",
@@ -153,7 +171,7 @@ async def cmd_menu(message: Message):
 
 @dp.message(Command("quiz"))
 async def cmd_quiz(message: Message):
-    await start_quiz(message.chat.id)
+    await message.answer(i18n["uk"]["quiz_choose"], parse_mode="HTML", reply_markup=get_quiz_categories_keyboard())
 
 @dp.message(Command("trends"))
 async def cmd_trends(message: Message):
@@ -162,7 +180,8 @@ async def cmd_trends(message: Message):
         "1. 🎸 <b>Rock / Metal</b> (Metallica, Linkin Park, AC/DC)\n"
         "2. ⚡ <b>Pop / Hits</b> (The Weeknd, Dua Lipa, Billie Eilish)\n"
         "3. 🎧 <b>Electronic / Dance</b> (Daft Punk, Avicii, David Guetta)\n"
-        "4. 🎤 <b>Ukrainian Pop & Rock</b> (Океан Ельзи, Бумбокс, SKOFKA)"
+        "4. 🎤 <b>Ukrainian Pop & Rock</b> (Океан Ельзи, Бумбокс, SKOFKA)\n"
+        "5. 📼 <b>80-ті та 💿 90-ті класика</b>"
     )
     await message.answer(trends_text, parse_mode="HTML")
 
@@ -178,10 +197,27 @@ async def text_triggers(message: Message):
         return
     text = message.text.strip()
     lower_text = text.lower()
-    
+    chat_id = message.chat.id
+
+    if chat_id in active_text_quizzes:
+        correct_answer = active_text_quizzes[chat_id].lower()
+        keywords = [w for w in correct_answer.split() if len(w) > 2]
+        if keywords and all(kw in lower_text for kw in keywords[:2]):
+            track_name = active_text_quizzes.pop(chat_id)
+            uid = message.from_user.id
+            name = message.from_user.first_name
+            
+            user_names[uid] = name
+            user_xp[uid] = user_xp.get(uid, 0) + 50
+            creator_data["creator_xp"] += 15
+            
+            win_msg = i18n["uk"]["quiz_win"].replace("{name}", name).replace("{track}", track_name)
+            await message.answer(win_msg, parse_mode="HTML")
+            return
+
     quiz_triggers = ["запусти музичну гру", "вгадай мелодію", "грати у вікторину", "запусти игру", "угадай мелодию"]
     if any(qt in lower_text for qt in quiz_triggers):
-        await start_quiz(message.chat.id)
+        await message.answer(i18n["uk"]["quiz_choose"], parse_mode="HTML", reply_markup=get_quiz_categories_keyboard())
         return
 
     if "знайди" in lower_text:
@@ -194,8 +230,28 @@ async def text_triggers(message: Message):
 
 @dp.callback_query(F.data == "start_quiz")
 async def cb_start_quiz(callback: CallbackQuery):
-    await start_quiz(callback.message.chat.id)
-    await callback.answer("Запускаю гру...")
+    await callback.message.answer(i18n["uk"]["quiz_choose"], parse_mode="HTML", reply_markup=get_quiz_categories_keyboard())
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("quiz_cat_"))
+async def cb_quiz_category(callback: CallbackQuery):
+    cat = callback.data.split("_")[2]
+    genre_map = {
+        "rock": "rock",
+        "pop": "pop",
+        "electronic": "dance",
+        "ukrainian": "ukrainian",
+        "80s": "1980",
+        "90s": "1990",
+        "random": random.choice(["rock", "pop", "dance", "1980", "1990"])
+    }
+    genre = genre_map.get(cat, "rock")
+    await start_quiz(callback.message.chat.id, genre)
+    await callback.answer("Гра розпочинається! 🎧")
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
 
 @dp.callback_query(F.data == "open_menu")
 async def cb_open_menu(callback: CallbackQuery):
@@ -211,7 +267,7 @@ async def cb_my_xp(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "show_creator_xp")
 async def cb_creator_xp(callback: CallbackQuery):
-    cXp = creator_data.get("creator_xp", 500)
+    cXp = creator_data.get("creator_xp", 750)
     text = i18n["uk"]["creator_xp"].replace("{xp}", str(cXp))
     await callback.answer(text, show_alert=True)
 
@@ -229,61 +285,52 @@ async def cb_leaderboard(callback: CallbackQuery):
     
     await callback.answer(lb_text, show_alert=True)
 
-@dp.callback_query(F.data.startswith("qz_"))
-async def cb_quiz_answer(callback: CallbackQuery):
-    msg_id = callback.message.message_id
-    if msg_id not in active_quizzes:
-        await callback.answer(i18n["uk"]["quiz_late"], show_alert=True)
-        return
-    
-    action = callback.data.split("_")[1]
-    if action == "correct":
-        correct_track = active_quizzes.pop(msg_id)
-        uid = callback.from_user.id
-        name = callback.from_user.first_name
-        
-        user_names[uid] = name
-        user_xp[uid] = user_xp.get(uid, 0) + 50
-        creator_data["creator_xp"] += 10
-        
-        win_text = i18n["uk"]["quiz_win"].replace("{name}", name).replace("{track}", correct_track)
-        await callback.message.edit_caption(caption=win_text, parse_mode="HTML")
-    else:
-        await callback.answer(i18n["uk"]["quiz_lose"], show_alert=False)
+@dp.callback_query(F.data == "thank_creator")
+async def cb_thank_creator(callback: CallbackQuery):
+    creator_data["creator_xp"] += 20
+    await callback.answer(i18n["uk"]["thanks_alert"], show_alert=True)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(i18n["uk"]["thanks_creator"])
 
-async def start_quiz(chat_id: int):
+async def start_quiz(chat_id: int, genre: str = "rock"):
     try:
         import aiohttp
         async with aiohttp.ClientSession() as session:
-            async with session.get("https://api.deezer.com/search?q=rock&limit=15") as resp:
+            query_url = f"https://api.deezer.com/search?q={genre}&limit=25"
+            async with session.get(query_url) as resp:
                 data = await resp.json()
-                if "data" not in data or len(data["data"]) < 4:
+                if "data" not in data or len(data["data"]) == 0:
                     return
                 
-                tracks = random.sample(data["data"], 4)
-                correct = tracks[0]
-                random.shuffle(tracks)
+                valid_tracks = [t for t in data["data"] if t.get("preview")]
+                if not valid_tracks:
+                    valid_tracks = data["data"]
                 
-                keyboard_rows = []
-                for tr in tracks:
-                    is_corr = (tr["id"] == correct["id"])
-                    keyboard_rows.append([
-                        InlineKeyboardButton(
-                            text=f"{tr['artist']['name']} - {tr['title']}",
-                            callback_data=f"qz_{'correct' if is_corr else 'wrong'}"
-                        )
-                    ])
+                track = random.choice(valid_tracks)
+                preview_url = track.get("preview")
+                artist_name = track["artist"]["name"]
+                track_title = track["title"]
                 
-                msg = await bot.send_audio(
-                    chat_id=chat_id,
-                    audio=correct["preview"],
-                    title="???",
-                    performer="???",
-                    caption=i18n["uk"]["quiz_start"],
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
-                )
-                active_quizzes[msg.message_id] = f"{correct['artist']['name']} - {correct['title']}"
+                active_text_quizzes[chat_id] = f"{artist_name} - {track_title}"
+                
+                if preview_url:
+                    await bot.send_audio(
+                        chat_id=chat_id,
+                        audio=preview_url,
+                        title="Вгадай мелодію",
+                        performer="Музична вікторина",
+                        caption=i18n["uk"]["quiz_start"],
+                        parse_mode="HTML"
+                    )
+                else:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=f"⚠️ Не вдалося знайти уривок для треку, але гра почалася!\n{i18n['uk']['quiz_start']}",
+                        parse_mode="HTML"
+                    )
     except Exception as e:
         logging.error(f"Quiz start error: {e}")
 
