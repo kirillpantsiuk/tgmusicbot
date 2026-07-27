@@ -44,6 +44,7 @@ i18n = {
             "Хто перший вгадає — отримує +50 XP!"
         ),
         "quiz_win": "🎉 <b>Браво, {name}!</b> Ти першим вгадав мелодію (+50 XP)!\n🎵 <b>Трек:</b> {track}",
+        "quiz_error": "❌ Не вдалося завантажити треки для цієї категорії. Спробуй іншу!",
         "thanks_creator": "❤️ Дякуємо! Твоя подяка зарахована, досвід творця збільшено!",
         "thanks_alert": "Дякуємо за підтримку автора! 🚀",
         "welcome_photo": "👋 <b>Привіт! Я твій музичний бот-помічник.</b>\nПрацюю в особистих повідомленнях та групових чатах!",
@@ -236,18 +237,24 @@ async def cb_start_quiz(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("quiz_cat_"))
 async def cb_quiz_category(callback: CallbackQuery):
     cat = callback.data.split("_")[2]
+    # Покращені пошукові запити для Deezer API, щоб 80-ті та 90-ті гарантовано знаходили треки
     genre_map = {
         "rock": "rock",
         "pop": "pop",
         "electronic": "dance",
         "ukrainian": "ukrainian",
-        "80s": "1980",
-        "90s": "1990",
-        "random": random.choice(["rock", "pop", "dance", "1980", "1990"])
+        "80s": "80s hits",
+        "90s": "90s hits",
+        "random": random.choice(["rock", "pop", "dance", "80s hits", "90s hits"])
     }
     genre = genre_map.get(cat, "rock")
-    await start_quiz(callback.message.chat.id, genre)
-    await callback.answer("Гра розпочинається! 🎧")
+    
+    success = await start_quiz(callback.message.chat.id, genre)
+    if success:
+        await callback.answer("Гра розпочинається! 🎧")
+    else:
+        await callback.answer(i18n["uk"]["quiz_error"], show_alert=True)
+        
     try:
         await callback.message.delete()
     except Exception:
@@ -270,7 +277,7 @@ async def cb_creator_xp(callback: CallbackQuery):
     cXp = creator_data.get("creator_xp", 750)
     text = i18n["uk"]["creator_xp"].replace("{xp}", str(cXp))
     await callback.answer(text, show_alert=True)
- 
+
 @dp.callback_query(F.data == "show_leaderboard")
 async def cb_leaderboard(callback: CallbackQuery):
     if not user_xp:
@@ -295,15 +302,15 @@ async def cb_thank_creator(callback: CallbackQuery):
         pass
     await callback.message.answer(i18n["uk"]["thanks_creator"])
 
-async def start_quiz(chat_id: int, genre: str = "rock"):
+async def start_quiz(chat_id: int, genre: str = "rock") -> bool:
     try:
         import aiohttp
         async with aiohttp.ClientSession() as session:
-            query_url = f"https://api.deezer.com/search?q={genre}&limit=25"
+            query_url = f"https://api.deezer.com/search?q={genre}&limit=30"
             async with session.get(query_url) as resp:
                 data = await resp.json()
                 if "data" not in data or len(data["data"]) == 0:
-                    return
+                    return False
                 
                 valid_tracks = [t for t in data["data"] if t.get("preview")]
                 if not valid_tracks:
@@ -325,14 +332,12 @@ async def start_quiz(chat_id: int, genre: str = "rock"):
                         caption=i18n["uk"]["quiz_start"],
                         parse_mode="HTML"
                     )
+                    return True
                 else:
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=f"⚠️ Не вдалося знайти уривок для треку, але гра почалася!\n{i18n['uk']['quiz_start']}",
-                        parse_mode="HTML"
-                    )
+                    return False
     except Exception as e:
         logging.error(f"Quiz start error: {e}")
+        return False
 
 async def handle_ping(request):
     return web.Response(text="Music Assistant Bot is running and active!")
