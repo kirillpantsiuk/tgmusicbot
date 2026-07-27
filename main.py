@@ -78,14 +78,17 @@ def download_audio(query: str):
             'preferredquality': '192',
         }],
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'default_search': 'ytsearch1',
+        'default_search': 'ytsearch',
         'noplaylist': True,
         'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
     }
     os.makedirs('downloads', exist_ok=True)
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(query, download=True)
+            search_query = f"ytsearch1:{query}"
+            info = ydl.extract_info(search_query, download=True)
             if 'entries' in info:
                 info = info['entries'][0]
             file_path = ydl.prepare_filename(info)
@@ -96,7 +99,7 @@ def download_audio(query: str):
                 'uploader': info.get('uploader', 'Unknown Artist')
             }
     except Exception as e:
-        logging.error(f"Download error: {e}")
+        logging.error(f"Download error for query '{query}': {e}")
         return None
 
 async def process_music_search(message: Message, query: str):
@@ -237,7 +240,6 @@ async def cb_start_quiz(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("quiz_cat_"))
 async def cb_quiz_category(callback: CallbackQuery):
     cat = callback.data.split("_")[2]
-    # Покращені пошукові запити для Deezer API, щоб 80-ті та 90-ті гарантовано знаходили треки
     genre_map = {
         "rock": "rock",
         "pop": "pop",
