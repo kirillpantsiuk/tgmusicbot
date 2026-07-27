@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.filters import Command
 import aiohttp
+import yt_dlp
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -34,7 +35,7 @@ i18n = {
         "btn_leaderboard": "🏆 Топ гравців",
         "xp_zero": "У тебе поки 0 XP 😢. Тисни «Вгадай мелодію», щоб заробити бали!",
         "xp_amount": "Твій музичний досвід: <b>{xp} XP</b> 🌟",
-        "creator_xp": "Досвід творця: <b>{xp} XP</b> 👑\nПроєкт розроблено на Python + Deezer API!",
+        "creator_xp": "Досвід творця: <b>{xp} XP</b> 👑\nПроєкт розроблено на Python + yt-dlp!",
         "quiz_choose": "🎮 <b>Вибери категорію для вікторини «Вгадай мелодію»:</b>",
         "quiz_start": (
             "🎧 <b>Музична вікторина «Вгадай мелодію»!</b>\n"
@@ -49,11 +50,10 @@ i18n = {
         "welcome_photo": "👋 <b>Привіт! Я твій музичний бот-помічник.</b>\nПрацюю в особистих повідомленнях та групових чатах!",
         "welcome_text": (
             "📖 <b>ПОВНА ІНСТРУКЦІЯ ТА МОЇ МОЖЛИВОСТІ:</b>\n\n"
-            "🎵 <b>1. Швидкий пошук треків (MP3):</b>\n"
-            "• Через команду: <code>/search [назва]</code> або <code>/шукай [назва]</code>\n"
-            "• Або просто напиши у чаті слово <b>«знайди»</b> разом із назвою (наприклад: <i>«знайди metallica»</i> або <i>«ЗНАЙДИ imagine dragons»</i>)\n\n"
+            "🎵 <b>1. Повний пошук треків (MP3):</b>\n"
+            "• Напиши у чаті слово <b>«знайди»</b> або <b>«шукай»</b> разом із назвою (наприклад: <i>«знайди metallica»</i> або <i>«шукай imagine dragons»</i>) — бот завантажить і надішле <b>повну версію</b> пісні!\n\n"
             "🎮 <b>2. Музична вікторина «Вгадай мелодію»:</b>\n"
-            "• Запусти гру командою: <code>/quiz</code>\n"
+            "• Запусти гру командою: <code>/quiz</code> або кнопкою в меню.\n"
             "• За кожну правильну відповідь ти отримуєш <b>+50 XP</b>!\n\n"
             "🏆 <b>3. Система прокачування та рейтинги:</b>\n"
             "• 🌟 Мій досвід | 👑 Досвід творця | 🏆 Топ гравців"
@@ -61,41 +61,69 @@ i18n = {
     }
 }
 
-async def process_music_search(message: Message, query: str):
-    status_msg = await message.answer(f"🔍 Шукаю за запитом: <b>{query}</b>...", parse_mode="HTML")
+# Функція завантаження ПОВНОГО треку через yt-dlp
+def download_full_audio(query: str):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': 'downloads/%(id)s.%(ext)s',
+        'default_search': 'ytsearch1',
+        'noplaylist': True,
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    }
+    os.makedirs('downloads', exist_ok=True)
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://api.deezer.com/search?q={query}&limit=1") as resp:
-                data = await resp.json()
-                if "data" not in data or len(data["data"]) == 0:
-                    await status_msg.edit_text(f"❌ За запитом «<b>{query}</b>» нічого не знайдено.", parse_mode="HTML")
-                    return
-                
-                track = data["data"][0]
-                preview_url = track.get("preview")
-                title = track.get("title")
-                artist = track["artist"]["name"]
-                
-                if not preview_url:
-                    await status_msg.edit_text(f"❌ Не вдалося знайти аудіофайл для «<b>{query}</b>».", parse_mode="HTML")
-                    return
-                
-                thanks_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="❤️ Віддячити творцю (+20 XP)", callback_data="thank_creator")]
-                ])
-                
-                await message.answer_audio(
-                    audio=preview_url,
-                    title=title,
-                    performer=artist,
-                    caption=f"🎵 <b>{title}</b>\n👤 <b>Виконавець:</b> {artist}",
-                    parse_mode="HTML",
-                    reply_markup=thanks_keyboard
-                )
-                await status_msg.delete()
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            search_query = f"ytsearch1:{query}"
+            info = ydl.extract_info(search_query, download=True)
+            if 'entries' in info:
+                info = info['entries'][0]
+            file_path = ydl.prepare_filename(info)
+            base, _ = os.path.splitext(file_path)
+            return {
+                'path': base + ".mp3",
+                'title': info.get('title', 'Unknown Title'),
+                'uploader': info.get('uploader', 'Unknown Artist')
+            }
     except Exception as e:
-        logging.error(f"Search error: {e}")
-        await status_msg.edit_text("❌ Сталася помилка при пошуку треку.")
+        logging.error(f"Download full audio error for '{query}': {e}")
+        return None
+
+async def process_music_search(message: Message, query: str):
+    status_msg = await message.answer(f"🔍 Завантажую <b>повну версію</b> за запитом: <b>{query}</b>...\n<i>Це може зайняти кілька секунд ⏳</i>", parse_mode="HTML")
+    loop = asyncio.get_event_loop()
+    track_info = await loop.run_in_executor(None, download_full_audio, query)
+    
+    if track_info and os.path.exists(track_info['path']):
+        try:
+            audio_file = FSInputFile(track_info['path'])
+            thanks_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❤️ Віддячити творцю (+20 XP)", callback_data="thank_creator")]
+            ])
+            await message.answer_audio(
+                audio=audio_file,
+                title=track_info['title'],
+                performer=track_info['uploader'],
+                caption=f"🎵 <b>{track_info['title']}</b>\n👤 <b>Виконавець:</b> {track_info['uploader']}\n✨ <i>Повна версія треку</i>",
+                parse_mode="HTML",
+                reply_markup=thanks_keyboard
+            )
+            await status_msg.delete()
+        except Exception as e:
+            logging.error(f"Send audio error: {e}")
+            await status_msg.edit_text("❌ Сталася помилка при відправці аудіофайлу.")
+        finally:
+            if os.path.exists(track_info['path']):
+                os.remove(track_info['path'])
+    else:
+        await status_msg.edit_text(f"❌ За запитом «<b>{query}</b>» нічого не знайдено або YouTube заблокував запит.", parse_mode="HTML")
 
 def get_menu_keyboard():
     t = i18n["uk"]
@@ -175,13 +203,15 @@ async def text_triggers(message: Message):
         await message.answer(i18n["uk"]["quiz_choose"], parse_mode="HTML", reply_markup=get_quiz_categories_keyboard())
         return
 
-    if "знайди" in lower_text:
-        parts = text.split("знайди", 1)
-        if len(parts) > 1:
-            query = parts[1].strip()
-            if query:
-                await process_music_search(message, query)
-                return
+    if "знайди" in lower_text or "шукай" in lower_text:
+        for prefix in ["знайди", "шукай"]:
+            if prefix in lower_text:
+                parts = text.split(prefix, 1)
+                if len(parts) > 1:
+                    query = parts[1].strip()
+                    if query:
+                        await process_music_search(message, query)
+                        return
 
 @dp.callback_query(F.data == "start_quiz")
 async def cb_start_quiz(callback: CallbackQuery):
