@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import random
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.filters import Command
@@ -166,7 +167,6 @@ async def cmd_search(message: Message):
     if len(text_parts) > 1:
         await process_music_search(message, text_parts[1].strip())
 
-# Універсальні тригери для звичайних повідомлень у чаті
 @dp.message(F.text)
 async def text_triggers(message: Message):
     if not message.text:
@@ -174,13 +174,11 @@ async def text_triggers(message: Message):
     text = message.text.strip()
     lower_text = text.lower()
     
-    # 1. Тригери для запуску музичної гри (будь-який регістр)
     quiz_triggers = ["запусти музичну гру", "вгадай мелодію", "грати у вікторину", "запусти игру", "угадай мелодию"]
     if any(qt in lower_text for qt in quiz_triggers):
         await start_quiz(message.chat.id)
         return
 
-    # 2. Тригер на слово "знайди" (працює як з великої, так і з малої літери)
     if "знайди" in lower_text:
         parts = text.split("знайди", 1)
         if len(parts) > 1:
@@ -284,8 +282,26 @@ async def start_quiz(chat_id: int):
     except Exception as e:
         logging.error(f"Quiz start error: {e}")
 
+# Простий вебсервер для утримання порту на Render
+async def handle_ping(request):
+    return web.Response(text="Music Assistant Bot is running and active!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Render передає свій порт через змінну середовища PORT (за замовчуванням 10000)
+    port = int(os.getenv("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logging.info(f"Web server started on port {port}")
+
 async def main():
-    print("Python Bot started successfully with full features and triggers...")
+    # Запускаємо і вебсервер (для порту Render), і опитування Telegram бота одночасно
+    await start_web_server()
+    print("Python Bot started successfully with web server & full features...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
