@@ -134,13 +134,13 @@ async def cmd_start(message: Message):
         [InlineKeyboardButton(text="➕ Додати бота в групу", url=add_url)],
         [InlineKeyboardButton(text="🎮 Меню та рейтинг", callback_data="open_menu")]
     ])
-    # Спочатку надсилаємо фото з коротким підписом
+    # Надсилаємо фото з коротким підписом
     await message.answer_photo(
         photo=LOGO_URL,
         caption=i18n["uk"]["welcome_photo"],
         parse_mode="HTML"
     )
-    # Потім надсилаємо повну інструкцію з кнопками
+    # Надіслати основний текст інструкції окремим повідомленням з кнопками
     await message.answer(
         text=i18n["uk"]["welcome_text"],
         parse_mode="HTML",
