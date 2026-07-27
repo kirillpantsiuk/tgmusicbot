@@ -270,7 +270,7 @@ async def cb_creator_xp(callback: CallbackQuery):
     cXp = creator_data.get("creator_xp", 750)
     text = i18n["uk"]["creator_xp"].replace("{xp}", str(cXp))
     await callback.answer(text, show_alert=True)
-
+ 
 @dp.callback_query(F.data == "show_leaderboard")
 async def cb_leaderboard(callback: CallbackQuery):
     if not user_xp:
