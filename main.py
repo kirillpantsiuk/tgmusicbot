@@ -78,16 +78,16 @@ def download_audio(query: str):
             'preferredquality': '192',
         }],
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'default_search': 'scsearch',  # Використовуємо SoundCloud замість YouTube
+        'default_search': 'auto',
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
-        'extract_flat': False,
     }
     os.makedirs('downloads', exist_ok=True)
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            search_query = f"scsearch1:{query}"  # Шукаємо через SoundCloud
+            # Використовуємо універсальний пошук без жорсткої прив'язки до платформи
+            search_query = f"auto:{query}"
             info = ydl.extract_info(search_query, download=True)
             if 'entries' in info:
                 info = info['entries'][0]
