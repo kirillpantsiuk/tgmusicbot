@@ -6,12 +6,15 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.filters import Command
 import yt_dlp
+from dotenv import load_dotenv
+
+# Завантажуємо локальний .env файл (якщо він є)
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 
-# Твої актуальні дані бота
-BOT_TOKEN = "8915515037:AAEXAqq_WuZSv0wVuLzlmscXpbV-jzeCkr4"
-BOT_USERNAME = "Mus1cassistant_bot"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_USERNAME = os.getenv("BOT_USERNAME", "Mus1cassistant_bot")
 LOGO_URL = "https://drive.google.com/uc?id=1NaUW0Q0bMp8rYniDN3gYpTGfGNSteMwS"
 
 bot = Bot(token=BOT_TOKEN)
@@ -40,11 +43,17 @@ i18n = {
         "welcome": (
             "👋 <b>Привіт! Я твій музичний бот-помічник.</b>\n"
             "Працюю як в <b>особистих повідомленнях</b>, так і в <b>групових чатах</b>!\n\n"
-            "📖 <b>ЯК КОРИСТУВАТИСЯ:</b>\n"
-            "🎵 <b>Пошук повних треків (MP3):</b>\n"
-            "• Напиши: <code>/search [назва]</code> або у чаті: <i>«знайди пісню metallica»</i>\n\n"
-            "🎮 <b>Музична вікторина:</b>\n"
-            "• Напиши у чаті: <i>«запусти музичну гру»</i> або <i>«вгадай мелодію»</i>"
+            "📖 <b>ПОВНА ІНСТРУКЦІЯ ТА МОЇ МОЖЛИВОСТІ:</b>\n\n"
+            "🎵 <b>1. Пошук повних треків (MP3):</b>\n"
+            "• Використай команду: <code>/search [назва]</code> або <code>/шукай [назва]</code>\n"
+            "• Або напиши у чаті розмовну фразу зі словом <b>«знайди»</b> (наприклад: <i>«знайди metallica»</i>, <i>«ЗНАЙДИ imagine dragons»</i>)\n\n"
+            "🎮 <b>2. Музична вікторина («Вгадай мелодію»):</b>\n"
+            "• Напиши команду: <code>/quiz</code>\n"
+            "• Або скористайся тригер-фразою у чаті: <i>«запусти музичну гру»</i>, <i>«вгадай мелодію»</i>, <i>«грати у вікторину»</i>\n\n"
+            "📊 <b>3. Інші команди та меню:</b>\n"
+            "• <code>/menu</code> — відкрити інтерактивне головне меню\n"
+            "• <code>/trends</code> — популярні музичні напрямки та жанри\n"
+            "• <code>/help</code> — довідка по роботі з ботом"
         )
     }
 }
@@ -152,6 +161,7 @@ async def cmd_search(message: Message):
     if len(text_parts) > 1:
         await process_music_search(message, text_parts[1].strip())
 
+# Універсальні тригери для звичайних повідомлень у чаті
 @dp.message(F.text)
 async def text_triggers(message: Message):
     if not message.text:
@@ -159,17 +169,20 @@ async def text_triggers(message: Message):
     text = message.text.strip()
     lower_text = text.lower()
     
+    # 1. Тригери для запуску музичної гри (будь-який регістр)
     quiz_triggers = ["запусти музичну гру", "вгадай мелодію", "грати у вікторину", "запусти игру", "угадай мелодию"]
     if any(qt in lower_text for qt in quiz_triggers):
         await start_quiz(message.chat.id)
         return
 
-    search_triggers = ["хочу знайти пісню", "знайди пісню", "хочу найти песню", "найди песню"]
-    found = next((t for t in search_triggers if t in lower_text), None)
-    if found:
-        query = text[lower_text.index(found) + len(found):].strip()
-        if query:
-            await process_music_search(message, query)
+    # 2. Тригер на слово "знайди" (працює як з великої, так і з малої літери)
+    if "знайди" in lower_text:
+        parts = text.split("знайди", 1)
+        if len(parts) > 1:
+            query = parts[1].strip()
+            if query:
+                await process_music_search(message, query)
+                return
 
 @dp.callback_query(F.data == "start_quiz")
 async def cb_start_quiz(callback: CallbackQuery):
@@ -267,7 +280,7 @@ async def start_quiz(chat_id: int):
         logging.error(f"Quiz start error: {e}")
 
 async def main():
-    print("Python Bot started successfully with token configuration...")
+    print("Python Bot started successfully with 'знайди' trigger and full instruction...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
