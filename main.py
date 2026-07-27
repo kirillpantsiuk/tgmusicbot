@@ -41,9 +41,8 @@ i18n = {
         "quiz_win": "🎉 <b>Правильно!</b> {name} отримує +50 XP!\n🎵 Пісня: {track}",
         "quiz_lose": "❌ Неправильно!",
         "quiz_late": "⏳ Халепа! Хтось вже вгадав цю пісню.",
-        "welcome": (
-            "👋 <b>Привіт! Я твій музичний бот-помічник.</b>\n"
-            "Я працюю як в <b>особистих повідомленнях</b>, так і в <b>групових чатах</b>!\n\n"
+        "welcome_photo": "👋 <b>Привіт! Я твій музичний бот-помічник.</b>\nПрацюю в особистих повідомленнях та групових чатах!",
+        "welcome_text": (
             "📖 <b>ПОВНА ІНСТРУКЦІЯ ТА МОЇ МОЖЛИВОСТІ:</b>\n\n"
             "🎵 <b>1. Швидкий пошук треків (MP3):</b>\n"
             "• Через команду: <code>/search [назва]</code> або <code>/шукай [назва]</code>\n"
@@ -135,9 +134,15 @@ async def cmd_start(message: Message):
         [InlineKeyboardButton(text="➕ Додати бота в групу", url=add_url)],
         [InlineKeyboardButton(text="🎮 Меню та рейтинг", callback_data="open_menu")]
     ])
+    # Спочатку надсилаємо фото з коротким підписом
     await message.answer_photo(
         photo=LOGO_URL,
-        caption=i18n["uk"]["welcome"],
+        caption=i18n["uk"]["welcome_photo"],
+        parse_mode="HTML"
+    )
+    # Потім надсилаємо повну інструкцію з кнопками
+    await message.answer(
+        text=i18n["uk"]["welcome_text"],
         parse_mode="HTML",
         reply_markup=keyboard
     )
@@ -282,7 +287,6 @@ async def start_quiz(chat_id: int):
     except Exception as e:
         logging.error(f"Quiz start error: {e}")
 
-# Простий вебсервер для утримання порту на Render
 async def handle_ping(request):
     return web.Response(text="Music Assistant Bot is running and active!")
 
@@ -292,14 +296,12 @@ async def start_web_server():
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Render передає свій порт через змінну середовища PORT (за замовчуванням 10000)
     port = int(os.getenv("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     logging.info(f"Web server started on port {port}")
 
 async def main():
-    # Запускаємо і вебсервер (для порту Render), і опитування Telegram бота одночасно
     await start_web_server()
     print("Python Bot started successfully with web server & full features...")
     await dp.start_polling(bot)
