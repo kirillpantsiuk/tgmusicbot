@@ -83,6 +83,8 @@ def download_audio(query: str):
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     os.makedirs('downloads', exist_ok=True)
     try:
